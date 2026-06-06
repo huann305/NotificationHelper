@@ -17,6 +17,10 @@
             android:theme="@style/Theme.NotificationHelper.FullScreen"
             android:turnScreenOn="true"
             tools:ignore="DiscouragedApi,LockedOrientationActivity" />
+
+        <receiver
+            android:name="com.huann305.notificationhelper.fullscreen.FullScreenAlarmReceiver"
+            android:exported="false" />
     </application>
 
 </manifest>

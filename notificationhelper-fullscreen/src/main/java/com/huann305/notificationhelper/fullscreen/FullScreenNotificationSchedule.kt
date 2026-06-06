@@ -1,6 +1,7 @@
 package com.huann305.notificationhelper.fullscreen
 
 import com.huann305.notificationhelper.NotificationOptions
+import com.huann305.notificationhelper.NotificationScheduleBackend
 
 data class FullScreenScheduledNotificationRequest(
     val content: FullScreenNotificationContent,
@@ -9,7 +10,8 @@ data class FullScreenScheduledNotificationRequest(
     val uniqueWorkName: String? = null,
     val replaceExisting: Boolean = true,
     val fallbackToNormalNotification: Boolean = true,
-    val launchActivityFallbackOnLockScreen: Boolean = true
+    val launchActivityFallbackOnLockScreen: Boolean = true,
+    val backend: NotificationScheduleBackend = NotificationScheduleBackend.ALARM_MANAGER
 ) {
     init {
         require(delayMillis >= 0L) { "delayMillis must be >= 0" }

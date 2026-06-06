@@ -5,7 +5,8 @@ data class ScheduledNotificationRequest(
     val options: NotificationOptions = NotificationOptions(),
     val delayMillis: Long,
     val uniqueWorkName: String? = null,
-    val replaceExisting: Boolean = true
+    val replaceExisting: Boolean = true,
+    val backend: NotificationScheduleBackend = NotificationScheduleBackend.ALARM_MANAGER
 ) {
     init {
         require(delayMillis >= 0L) { "delayMillis must be >= 0" }

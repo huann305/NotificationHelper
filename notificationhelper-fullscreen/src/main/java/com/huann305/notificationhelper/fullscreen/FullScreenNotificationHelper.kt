@@ -3,6 +3,7 @@ package com.huann305.notificationhelper.fullscreen
 import android.Manifest
 import android.app.Activity
 import android.app.ActivityOptions
+import android.app.AlarmManager
 import android.app.AppOpsManager
 import android.app.KeyguardManager
 import android.app.NotificationManager
@@ -28,6 +29,7 @@ import androidx.work.WorkManager
 import com.huann305.notificationhelper.NotificationContent
 import com.huann305.notificationhelper.NotificationHelper
 import com.huann305.notificationhelper.NotificationOptions
+import com.huann305.notificationhelper.NotificationScheduleBackend
 import java.util.Calendar
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -239,6 +241,10 @@ object FullScreenNotificationHelper {
         context: Context,
         request: FullScreenScheduledNotificationRequest
     ): UUID {
+        if (request.backend == NotificationScheduleBackend.ALARM_MANAGER) {
+            return scheduleWithAlarmManager(context.applicationContext, request)
+        }
+
         val data = buildWorkData(
             content = request.content,
             options = request.options,
@@ -421,12 +427,16 @@ object FullScreenNotificationHelper {
 
     @JvmStatic
     fun cancelScheduled(context: Context, uniqueWorkName: String) {
-        WorkManager.getInstance(context.applicationContext).cancelUniqueWork(uniqueWorkName)
+        val appContext = context.applicationContext
+        WorkManager.getInstance(appContext).cancelUniqueWork(uniqueWorkName)
+        cancelAlarm(appContext, alarmRequestCode(uniqueWorkName, 0))
     }
 
     @JvmStatic
     fun cancelAllScheduled(context: Context) {
-        WorkManager.getInstance(context.applicationContext).cancelAllWorkByTag(WORK_TAG)
+        val appContext = context.applicationContext
+        WorkManager.getInstance(appContext).cancelAllWorkByTag(WORK_TAG)
+        cancelAllAlarms(appContext)
     }
 
     @JvmStatic
@@ -562,6 +572,134 @@ object FullScreenNotificationHelper {
             launchActivityFallbackOnLockScreen
         )
         .build()
+
+    private fun scheduleWithAlarmManager(
+        context: Context,
+        request: FullScreenScheduledNotificationRequest
+    ): UUID {
+        val requestCode = alarmRequestCode(request.uniqueWorkName, request.options.requestCode)
+        if (!request.replaceExisting && hasAlarm(context, requestCode)) {
+            return UUID.nameUUIDFromBytes(requestCode.toString().toByteArray())
+        }
+
+        val pendingIntent = buildAlarmPendingIntent(context, request, requestCode)
+        val triggerAtMillis = runCatching {
+            Math.addExact(System.currentTimeMillis(), request.delayMillis)
+        }.getOrElse { error ->
+            throw IllegalArgumentException("delay is too large", error)
+        }
+
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            alarmManager.setAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP,
+                triggerAtMillis,
+                pendingIntent
+            )
+        } else {
+            alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+        }
+        rememberAlarm(context, requestCode)
+        return UUID.nameUUIDFromBytes(requestCode.toString().toByteArray())
+    }
+
+    private fun buildAlarmPendingIntent(
+        context: Context,
+        request: FullScreenScheduledNotificationRequest,
+        requestCode: Int
+    ): PendingIntent {
+        val data = buildWorkData(
+            content = request.content,
+            options = request.options,
+            fallbackToNormalNotification = request.fallbackToNormalNotification,
+            launchActivityFallbackOnLockScreen = request.launchActivityFallbackOnLockScreen
+        ).toByteArray()
+        val intent = Intent(context, FullScreenAlarmReceiver::class.java).apply {
+            action = FullScreenAlarmContract.ACTION
+            putExtra(FullScreenAlarmContract.EXTRA_DATA, data)
+            putExtra(FullScreenAlarmContract.EXTRA_REQUEST_CODE, requestCode)
+        }
+        return PendingIntent.getBroadcast(
+            context,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
+    private fun hasAlarm(context: Context, requestCode: Int): Boolean {
+        val existing = PendingIntent.getBroadcast(
+            context,
+            requestCode,
+            alarmIntent(context),
+            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+        )
+        return existing != null
+    }
+
+    private fun cancelAlarm(context: Context, requestCode: Int) {
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            requestCode,
+            alarmIntent(context),
+            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+        ) ?: return
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        alarmManager.cancel(pendingIntent)
+        pendingIntent.cancel()
+        forgetAlarm(context, requestCode)
+    }
+
+    private fun cancelAllAlarms(context: Context) {
+        alarmRequestCodes(context).forEach { requestCode ->
+            cancelAlarm(context, requestCode)
+        }
+        alarmPrefs(context).edit().remove(FullScreenAlarmContract.REQUEST_CODES).apply()
+    }
+
+    internal fun forgetAlarm(context: Context, requestCode: Int) {
+        if (requestCode == 0) return
+        val nextCodes = alarmRequestCodes(context)
+            .filterNot { it == requestCode }
+            .map(Int::toString)
+            .toSet()
+        alarmPrefs(context).edit()
+            .putStringSet(FullScreenAlarmContract.REQUEST_CODES, nextCodes)
+            .apply()
+    }
+
+    private fun rememberAlarm(context: Context, requestCode: Int) {
+        val nextCodes = alarmRequestCodes(context)
+            .plus(requestCode)
+            .map(Int::toString)
+            .toSet()
+        alarmPrefs(context).edit()
+            .putStringSet(FullScreenAlarmContract.REQUEST_CODES, nextCodes)
+            .apply()
+    }
+
+    private fun alarmRequestCodes(context: Context): Set<Int> {
+        return alarmPrefs(context)
+            .getStringSet(FullScreenAlarmContract.REQUEST_CODES, emptySet())
+            .orEmpty()
+            .mapNotNull(String::toIntOrNull)
+            .toSet()
+    }
+
+    private fun alarmPrefs(context: Context) = context.getSharedPreferences(
+        FullScreenAlarmContract.PREFS,
+        Context.MODE_PRIVATE
+    )
+
+    private fun alarmIntent(context: Context): Intent {
+        return Intent(context, FullScreenAlarmReceiver::class.java).apply {
+            action = FullScreenAlarmContract.ACTION
+        }
+    }
+
+    private fun alarmRequestCode(uniqueWorkName: String?, fallbackRequestCode: Int): Int {
+        return uniqueWorkName?.hashCode() ?: fallbackRequestCode
+    }
 
     private fun nextDailyDelayMillis(hourOfDay: Int, minute: Int): Long {
         val now = Calendar.getInstance()

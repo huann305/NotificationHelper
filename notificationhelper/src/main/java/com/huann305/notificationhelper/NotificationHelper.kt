@@ -2,6 +2,7 @@ package com.huann305.notificationhelper
 
 import android.Manifest
 import android.app.Activity
+import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -179,6 +180,10 @@ object NotificationHelper {
         context: Context,
         request: ScheduledNotificationRequest
     ): UUID {
+        if (request.backend == NotificationScheduleBackend.ALARM_MANAGER) {
+            return scheduleWithAlarmManager(context.applicationContext, request)
+        }
+
         val data = buildWorkData(request.content, request.options)
         val workRequest = OneTimeWorkRequestBuilder<NotificationWorker>()
             .setInitialDelay(request.delayMillis, TimeUnit.MILLISECONDS)
@@ -332,11 +337,14 @@ object NotificationHelper {
     @JvmStatic
     fun cancelScheduled(context: Context, uniqueWorkName: String) {
         WorkManager.getInstance(context.applicationContext).cancelUniqueWork(uniqueWorkName)
+        cancelAlarm(context.applicationContext, alarmRequestCode(uniqueWorkName, 0))
     }
 
     @JvmStatic
     fun cancelAllScheduled(context: Context) {
-        WorkManager.getInstance(context.applicationContext).cancelAllWorkByTag(WORK_TAG)
+        val appContext = context.applicationContext
+        WorkManager.getInstance(appContext).cancelAllWorkByTag(WORK_TAG)
+        cancelAllAlarms(appContext)
     }
 
     private fun canPostNotification(context: Context): Boolean {
@@ -702,6 +710,129 @@ object NotificationHelper {
         .also { content.toData(it) }
         .also { options.toData(it) }
         .build()
+
+    private fun scheduleWithAlarmManager(
+        context: Context,
+        request: ScheduledNotificationRequest
+    ): UUID {
+        val requestCode = alarmRequestCode(request.uniqueWorkName, request.options.requestCode)
+        if (!request.replaceExisting && hasAlarm(context, requestCode)) {
+            return UUID.nameUUIDFromBytes(requestCode.toString().toByteArray())
+        }
+
+        val pendingIntent = buildAlarmPendingIntent(context, request, requestCode)
+        val triggerAtMillis = runCatching {
+            Math.addExact(System.currentTimeMillis(), request.delayMillis)
+        }.getOrElse { error ->
+            throw IllegalArgumentException("delay is too large", error)
+        }
+
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            alarmManager.setAndAllowWhileIdle(
+                AlarmManager.RTC_WAKEUP,
+                triggerAtMillis,
+                pendingIntent
+            )
+        } else {
+            alarmManager.set(AlarmManager.RTC_WAKEUP, triggerAtMillis, pendingIntent)
+        }
+        rememberAlarm(context, requestCode)
+        return UUID.nameUUIDFromBytes(requestCode.toString().toByteArray())
+    }
+
+    private fun buildAlarmPendingIntent(
+        context: Context,
+        request: ScheduledNotificationRequest,
+        requestCode: Int
+    ): PendingIntent {
+        val data = buildWorkData(request.content, request.options).toByteArray()
+        val intent = Intent(context, NotificationAlarmReceiver::class.java).apply {
+            action = NotificationAlarmContract.ACTION
+            putExtra(NotificationAlarmContract.EXTRA_DATA, data)
+            putExtra(NotificationAlarmContract.EXTRA_REQUEST_CODE, requestCode)
+        }
+        return PendingIntent.getBroadcast(
+            context,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
+    private fun hasAlarm(context: Context, requestCode: Int): Boolean {
+        val existing = PendingIntent.getBroadcast(
+            context,
+            requestCode,
+            alarmIntent(context),
+            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+        )
+        return existing != null
+    }
+
+    private fun cancelAlarm(context: Context, requestCode: Int) {
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            requestCode,
+            alarmIntent(context),
+            PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+        ) ?: return
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        alarmManager.cancel(pendingIntent)
+        pendingIntent.cancel()
+        forgetAlarm(context, requestCode)
+    }
+
+    private fun cancelAllAlarms(context: Context) {
+        alarmRequestCodes(context).forEach { requestCode ->
+            cancelAlarm(context, requestCode)
+        }
+        alarmPrefs(context).edit().remove(NotificationAlarmContract.REQUEST_CODES).apply()
+    }
+
+    internal fun forgetAlarm(context: Context, requestCode: Int) {
+        if (requestCode == 0) return
+        val nextCodes = alarmRequestCodes(context)
+            .filterNot { it == requestCode }
+            .map(Int::toString)
+            .toSet()
+        alarmPrefs(context).edit()
+            .putStringSet(NotificationAlarmContract.REQUEST_CODES, nextCodes)
+            .apply()
+    }
+
+    private fun rememberAlarm(context: Context, requestCode: Int) {
+        val nextCodes = alarmRequestCodes(context)
+            .plus(requestCode)
+            .map(Int::toString)
+            .toSet()
+        alarmPrefs(context).edit()
+            .putStringSet(NotificationAlarmContract.REQUEST_CODES, nextCodes)
+            .apply()
+    }
+
+    private fun alarmRequestCodes(context: Context): Set<Int> {
+        return alarmPrefs(context)
+            .getStringSet(NotificationAlarmContract.REQUEST_CODES, emptySet())
+            .orEmpty()
+            .mapNotNull(String::toIntOrNull)
+            .toSet()
+    }
+
+    private fun alarmPrefs(context: Context) = context.getSharedPreferences(
+        NotificationAlarmContract.PREFS,
+        Context.MODE_PRIVATE
+    )
+
+    private fun alarmIntent(context: Context): Intent {
+        return Intent(context, NotificationAlarmReceiver::class.java).apply {
+            action = NotificationAlarmContract.ACTION
+        }
+    }
+
+    private fun alarmRequestCode(uniqueWorkName: String?, fallbackRequestCode: Int): Int {
+        return uniqueWorkName?.hashCode() ?: fallbackRequestCode
+    }
 
     private fun nextDailyDelayMillis(hourOfDay: Int, minute: Int): Long {
         val now = Calendar.getInstance()

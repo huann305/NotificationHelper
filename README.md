@@ -4,7 +4,7 @@ Android notification helper library with two separate artifacts:
 
 | Artifact | Purpose | Sensitive permission |
 | --- | --- | --- |
-| `notificationhelper` | Normal notifications, POST_NOTIFICATIONS permission helper, immediate send, WorkManager scheduling, big notifications, optional custom RemoteViews layouts, URL images. | None beyond normal notification permission. |
+| `notificationhelper` | Normal notifications, POST_NOTIFICATIONS permission helper, immediate send, AlarmManager/WorkManager scheduling, big notifications, optional custom RemoteViews layouts, URL images. | None beyond normal notification permission. |
 | `notificationhelper-fullscreen` | Optional full-screen lock-screen notifications and full-screen layout UI. | `USE_FULL_SCREEN_INTENT` |
 
 Import `notificationhelper-fullscreen` only in apps that really need full-screen lock-screen behavior. Apps that only use normal notifications should import `notificationhelper` only.
@@ -86,7 +86,7 @@ NotificationHelper.sendNow(
 )
 ```
 
-Schedule with WorkManager:
+Schedule one-time notifications. One-time `schedule`, `scheduleAfter`, and `scheduleAt` use `AlarmManager` by default so the notification can still fire if the app process is killed from Recent Apps. No exact-alarm permission is added.
 
 ```kotlin
 NotificationHelper.scheduleAfter(
@@ -130,7 +130,24 @@ NotificationHelper.scheduleDaily(
 )
 ```
 
-WorkManager scheduling is reliable but not exact to the millisecond.
+`AlarmManager` scheduling is still not guaranteed after a real force-stop. Some OEMs, including Xiaomi/HyperOS builds, can treat clearing Recent Apps as a force-stop; in that state Android blocks app alarms, jobs, and broadcasts until the user opens the app again. Ask users to allow autostart/no battery restriction for reminder-style apps.
+Daily schedules use WorkManager.
+
+To force WorkManager for one-time work:
+
+```kotlin
+NotificationHelper.schedule(
+    context,
+    ScheduledNotificationRequest(
+        content = NotificationContent("Scheduled", "Sent by WorkManager"),
+        options = NotificationOptions(notificationId = 1006),
+        delayMillis = 10_000L,
+        uniqueWorkName = "workmanager_notification",
+        backend = NotificationScheduleBackend.WORK_MANAGER
+    )
+)
+```
+
 For `scheduleAt(year, month, dayOfMonth, hourOfDay, minute, second, ...)`, `month` uses the natural range `1..12`.
 
 ## Big Notifications
@@ -290,6 +307,8 @@ FullScreenNotificationHelper.scheduleAt(
     launchActivityFallbackOnLockScreen = true
 )
 ```
+
+One-time full-screen schedules also use `AlarmManager` by default. Use `FullScreenScheduledNotificationRequest(backend = NotificationScheduleBackend.WORK_MANAGER, ...)` only when you specifically want WorkManager semantics.
 
 If full-screen permission is missing or the device is not locked, `fallbackToNormalNotification = true` posts a normal notification instead. Set it to `false` if the app should not post a fallback card.
 
