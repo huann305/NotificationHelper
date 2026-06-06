@@ -4,8 +4,8 @@ The project publishes two Android library artifacts:
 
 | Module | Maven artifact |
 | --- | --- |
-| `:notificationhelper` | `io.github.huann305:notificationhelper:1.0.0` |
-| `:notificationhelper-fullscreen` | `io.github.huann305:notificationhelper-fullscreen:1.0.0` |
+| `:notificationhelper` | `io.github.huann305:notificationhelper:1.0.2` |
+| `:notificationhelper-fullscreen` | `io.github.huann305:notificationhelper-fullscreen:1.0.2` |
 
 The full-screen artifact depends on the base artifact. Keep them versioned together.
 
@@ -15,7 +15,7 @@ Default values are in `gradle.properties`:
 
 ```properties
 POM_GROUP_ID=io.github.huann305
-POM_VERSION=1.0.0
+POM_VERSION=1.0.2
 POM_URL=https://github.com/huann305/NotificationHelper
 POM_SCM_URL=https://github.com/huann305/NotificationHelper
 ```
@@ -54,8 +54,8 @@ repositories {
 }
 
 dependencies {
-    implementation("io.github.huann305:notificationhelper:1.0.0")
-    implementation("io.github.huann305:notificationhelper-fullscreen:1.0.0")
+    implementation("io.github.huann305:notificationhelper:1.0.2")
+    implementation("io.github.huann305:notificationhelper-fullscreen:1.0.2")
 }
 ```
 

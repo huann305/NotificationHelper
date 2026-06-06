@@ -4,7 +4,7 @@ plugins {
 }
 
 val pomGroupId = providers.gradleProperty("POM_GROUP_ID").orElse("io.github.huann305")
-val pomVersion = providers.gradleProperty("POM_VERSION").orElse("1.0.0")
+val pomVersion = providers.gradleProperty("POM_VERSION").orElse("1.0.2")
 val pomUrl = providers.gradleProperty("POM_URL")
     .orElse("https://github.com/huann305/NotificationHelper")
 val pomScmUrl = providers.gradleProperty("POM_SCM_URL")

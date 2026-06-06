@@ -15,10 +15,10 @@ After publishing to Maven Local or your Maven repository:
 
 ```kotlin
 dependencies {
-    implementation("io.github.huann305:notificationhelper:1.0.0")
+    implementation("io.github.huann305:notificationhelper:1.0.2")
 
     // Optional. Import only when the app needs lock-screen full-screen notifications.
-    implementation("io.github.huann305:notificationhelper-fullscreen:1.0.0")
+    implementation("io.github.huann305:notificationhelper-fullscreen:1.0.2")
 }
 ```
 
@@ -217,7 +217,7 @@ Import the optional artifact only when needed:
 
 ```kotlin
 dependencies {
-    implementation("io.github.huann305:notificationhelper-fullscreen:1.0.0")
+    implementation("io.github.huann305:notificationhelper-fullscreen:1.0.2")
 }
 ```
 
