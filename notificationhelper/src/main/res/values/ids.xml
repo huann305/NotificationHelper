@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="notification_helper_normal_root" type="id" />
+    <item name="notification_helper_normal_icon" type="id" />
+    <item name="notification_helper_normal_title" type="id" />
+    <item name="notification_helper_normal_message" type="id" />
+    <item name="notification_helper_normal_image" type="id" />
+    <item name="notification_helper_normal_primary_action" type="id" />
+</resources>

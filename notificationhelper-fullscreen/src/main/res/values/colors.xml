@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="nh_screen_bg">#101214</color>
+    <color name="nh_card_bg">#F7F8FA</color>
+    <color name="nh_text_primary">#15181C</color>
+    <color name="nh_text_secondary">#5D6673</color>
+    <color name="nh_button_bg">#126CFF</color>
+    <color name="nh_button_text">#FFFFFFFF</color>
+    <color name="nh_dismiss_text">#D8DCE3</color>
+</resources>

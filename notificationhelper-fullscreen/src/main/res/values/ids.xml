@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="notification_helper_root" type="id" />
+    <item name="notification_helper_time" type="id" />
+    <item name="notification_helper_date" type="id" />
+    <item name="notification_helper_close" type="id" />
+    <item name="notification_helper_notification_container" type="id" />
+    <item name="notification_helper_app_icon" type="id" />
+    <item name="notification_helper_title" type="id" />
+    <item name="notification_helper_message" type="id" />
+    <item name="notification_helper_image" type="id" />
+    <item name="notification_helper_primary_action" type="id" />
+    <item name="notification_helper_dismiss_action" type="id" />
+</resources>
